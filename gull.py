@@ -2,7 +2,10 @@ from seleniumbase import SB
 import random
 import base64
 import requests
-
+from seleniumbase import SB
+import random
+import base64
+import requests
 
 def get_geo_data():
     """Fetch geolocation and timezone information based on current IP."""
@@ -74,13 +77,81 @@ def run_session(twitch_url: str, youtube_url: str, geo: dict):
 
 
 def main():
-    geo = get_geo_data()
-    channel_name = decode_channel_name("YnJ1dGFsbGVz")
-    twitch_url = f"https://www.twitch.tv/{channel_name}"
-    youtube_url = f"https://www.youtube.com/@{channel_name}/live"
 
-    while run_session(twitch_url, youtube_url, geo):
-        continue
+    
+    # grab geo info
+    geo_info = requests.get("http://ip-api.com/json/").json()
+    lat = geo_info["lat"]
+    lon = geo_info["lon"]
+    tz = geo_info["timezone"]
+    lang = geo_info["countryCode"].lower()
+    
+    # decode the name
+    encoded_name = "YnJ1dGFsbGVz"
+    decoded_bytes = base64.b64decode(encoded_name)
+    decoded_name = decoded_bytes.decode("utf-8")
+    
+    # make urls
+    twitch_url = "https://www.twitch.tv/" + decoded_name
+    yt_url = "https://www.youtube.com/@" + decoded_name + "/live"
+    
+    # loop forever until break
+    while True:
+        # open browser
+        with SB(uc=True, locale="en", ad_block=True, chromium_arg="--disable-webgl") as driver:
+            # random wait time
+            wait_time = random.randint(450, 900)
+    
+            # activate cdp mode
+            driver.activate_cdp_mode(twitch_url, tzone=tz, geoloc=(lat, lon))
+    
+            driver.sleep(10)
+    
+            # check buttons
+            if driver.cdp.is_element_present('button:contains("Start Watching")'):
+                driver.cdp.click('button:contains("Start Watching")', timeout=4)
+                driver.sleep(10)
+    
+            if driver.cdp.is_element_present('button:contains("Accept")'):
+                driver.cdp.click('button:contains("Accept")', timeout=4)
+    
+            # check if live stream info exists
+            if driver.cdp.is_element_present("#live-channel-stream-information"):
+                # accept again if needed
+                if driver.cdp.is_element_present('button:contains("Accept")'):
+                    driver.cdp.click('button:contains("Accept")', timeout=4)
+    
+                # open another driver
+                d2 = driver.get_new_driver(undetectable=True)
+                d2.activate_cdp_mode(twitch_url, tzone=tz, geoloc=(lat, lon))
+                d2.sleep(10)
+    
+                if d2.cdp.is_element_present('button:contains("Start Watching")'):
+                    d2.cdp.click('button:contains("Start Watching")', timeout=4)
+                    d2.sleep(10)
+    
+                if d2.cdp.is_element_present('button:contains("Accept")'):
+                    d2.cdp.click('button:contains("Accept")', timeout=4)
+    
+                driver.sleep(10)
+    
+                # third driver for youtube
+                d3 = driver.get_new_driver(undetectable=True)
+                d3.activate_cdp_mode(yt_url, tzone=tz, geoloc=(lat, lon))
+                d3.sleep(10)
+    
+                if d3.cdp.is_element_present('button:contains("Accept")'):
+                    d3.cdp.click('button:contains("Accept")', timeout=4)
+                    d3.sleep(10)
+                else:
+                    d3.sleep(10)
+                    d3.cdp.gui_press_key("K")
+    
+                driver.sleep(wait_time)
+                driver.quit_extra_driver()
+            else:
+                break
+
 
 
 if __name__ == "__main__":
